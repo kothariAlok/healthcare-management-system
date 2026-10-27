@@ -1,190 +1,381 @@
 # Healthcare Management System
 
-A backend REST API application built using Java, Spring Boot, Spring Data JPA, Hibernate, and MySQL. The project demonstrates core backend development concepts through the management of patient and doctor records.
+A RESTful backend application built with Java, Spring Boot, Spring Data JPA, Hibernate, and MySQL to manage healthcare operations, including patient records, doctor information, and appointment scheduling.
 
-## Overview
-
-The Healthcare Management System provides REST endpoints for managing healthcare data. It is being developed as a learning and portfolio project to demonstrate REST API development, database integration, and layered application architecture.
+The project demonstrates backend development concepts such as MVC architecture, REST APIs, database relationships, input validation, exception handling, and appointment conflict prevention.
 
 ## Features
 
-### Patient Management
-- Create patient records
-- Retrieve patient information
-- Update existing patient records
-- Search patient by keyword
-- Delete patient records
+### 1. Patient Management
+- Create patient records.
+- Retrieve patient details.
+- Update patient information.
+- Delete patient records.
+- Validate patient input.
+- Store patient information in MySQL.
 
-### Doctor Management
-- Create doctor records
-- Retrieve doctor information
-- Update existing doctor records
-- Search doctor by keyword
-- Delete doctor records
+### 2. Doctor Management
+- Create doctor records.
+- Retrieve doctor details.
+- Update doctor information.
+- Delete doctor records.
+- Persist doctor information using Spring Data JPA.
 
-*Include only the features implemented and tested in current version.*
+### 3. Appointment Management
+- Book appointments for existing patients and doctors.
+- Automatically calculate a 30-minute appointment duration.
+- Check doctor availability before booking.
+- Reject overlapping appointments for the same doctor.
+- Allow consecutive appointments when one ends as another begins.
+- Retrieve appointments by ID, doctor, or patient.
+- Cancel appointments and release the associated time slot.
+- Track appointment status: `BOOKED`, `CANCELLED`, or `COMPLETED`.
+
+**Note:** Appointment conflict prevention is implemented through a database conflict check and a pessimistic lock on the doctor record. Booking requests should use the service layer to enforce these rules.
 
 ## Technology Stack
 
-- **Language:** Java
-- **Framework:** Spring Boot
-- **Persistence:** Spring Data JPA, Hibernate
-- **Database:** MySQL
-- **Build Tool:** Maven
-- **API Testing:** Postman
-- **Version Control:** Git and GitHub
+| Technology | Purpose |
+|---|---|
+| Java 17 | Programming language |
+| Spring Boot | Application framework |
+| Spring Web MVC | REST API development |
+| Spring Data JPA | Database access |
+| Hibernate | ORM and entity mapping |
+| MySQL | Relational database |
+| Maven | Dependency management and build |
+| Jakarta Bean Validation | Request validation |
+| Postman | API testing |
+| Git and GitHub | Version control |
 
-## Application Architecture
+## Project Architecture
 
-The application follows a layered architecture:
+The application follows a layered MVC architecture.
 
 ```text
-Client (Postman)
-      |
-      v
+src/main/java/com/healthcare/hms/
+├── controller/
+│   ├── PatientController.java
+│   ├── DoctorController.java
+│   └── AppointmentController.java
+├── dto/
+│   └── AppointmentRequest.java
+├── model/
+│   ├── Patient.java
+│   ├── Doctor.java
+│   ├── Appointment.java
+│   └── AppointmentStatus.java
+├── repository/
+│   ├── PatientRepository.java
+│   ├── DoctorRepository.java
+│   └── AppointmentRepository.java
+├── service/
+│   └── AppointmentService.java
+|   └── PatientService.java
+|   └── DoctorService.java
+├── exception/
+│   ├── ResourceNotFoundException.java
+│   ├── AppointmentConflictException.java
+│   └── GlobalExceptionHandler.java
+└── HmsApplication.java
+```
+
+The files above represent the intended structure. Adjust the tree to match the actual packages and files in your repository.
+
+### Request Flow
+
+```text
+Client / Postman
+       |
+       v
 REST Controller
-      |
-      v
+       |
+       v
 Service Layer
-      |
-      v
+       |
+       v
 Repository Layer
-      |
-      v
+       |
+       v
+Hibernate / JPA
+       |
+       v
 MySQL Database
 ```
 
 - **Controller:** Receives HTTP requests and returns responses.
-- **Service:** Contains business logic.
-- **Repository:** Handles database operations using Spring Data JPA.
-- **Entity:** Represents database records.
+- **Service:** Implements business rules and coordinates operations.
+- **Repository:** Reads and writes database records.
+- **Entity:** Represents database tables and relationships.
+- **DTO:** Defines the data accepted by selected API endpoints.
+- **Exception handler:** Returns consistent error responses.
 
-## API Documentation
+## Database Design
 
-Base URL for local development:
+The application uses MySQL to persist patient, doctor, and appointment data.
 
-`http://localhost:8080`
+### Appointment relationships
 
-### Patient APIs
+- Each appointment belongs to one patient.
+- Each appointment belongs to one doctor.
+- A patient or doctor can have multiple appointments.
+- Cancelled appointments do not block future bookings.
+- Appointment start and end times are stored in the database.
 
-The following table assumes the base path `/api/patients`. Update it to match your actual controller mappings.
+## Appointment Conflict Prevention
 
-| Method | Endpoint | Purpose |
+Appointments use a fixed duration of 30 minutes.
+
+For example:
+
+| Existing appointment | Requested appointment | Result |
 |---|---|---|
-| POST | `/api/patients` | Create a patient |
-| GET | `/api/patients` | Retrieve all patients |
-| GET | `/api/patients/{id}` | Retrieve a patient by ID |
-| PUT | `/api/patients/{id}` | Update a patient |
-| DELETE | `/api/patients/{id}` | Delete a patient |
+| 10:00–10:30 | 10:15–10:45 | Rejected |
+| 10:00–10:30 | 10:30–11:00 | Accepted |
+| 10:00–10:30, cancelled | 10:00–10:30 | Accepted |
 
-### Doctor APIs
+The overlap condition is:
 
-The following table assumes the base path `/api/doctors`. Include these endpoints only after implementing and testing them.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/api/doctors` | Create a doctor |
-| GET | `/api/doctors` | Retrieve all doctors |
-| GET | `/api/doctors/{id}` | Retrieve a doctor by ID |
-| PUT | `/api/doctors/{id}` | Update a doctor |
-| DELETE | `/api/doctors/{id}` | Delete a doctor |
-
-## Example API Request
-
-Example request to create a patient. Replace the fields with the fields defined in your actual `Patient` entity.
-
-**POST** `/api/patients`
-
-```json
-{
-  "firstName": "Rahul",
-  "lastName": "Sharma",
-  "dateOfBirth": "1996-05-15",
-  "gender": "Male",
-  "phoneNumber": "9876543210",
-  "email": "rahul.sharma@example.com",
-  "address": "Andheri East, Mumbai",
-  "bloodGroup": "O+",
-  "emergencyContact": "9876501234",
-  "medicalHistory": "No significant medical history",
-  "allergies": "Penicillin"
-}
+```java
+existingStart < requestedEnd
+        && existingEnd > requestedStart
 ```
 
-Example only. The request body must match the fields accepted by your application.
+The application checks for an existing non-cancelled appointment for the same doctor. A transaction and pessimistic doctor-row lock help serialize concurrent booking attempts that use the same booking service.
 
-## Database Configuration
+## Prerequisites
 
-The application uses MySQL for persistent data storage.
+Install the following before running the application:
 
-Configure your local database connection using environment variables:
+- Java Development Kit (JDK) compatible with your Spring Boot version.
+- Maven, or use the Maven wrapper included with the project.
+- MySQL Server.
+- IntelliJ IDEA or another Java IDE.
+- Postman or another REST API client.
+
+**Version note:** Verify the Java version required by the Spring Boot version configured in `pom.xml`. This project currently specifies Java 17 and Spring Boot 4.1.2; use a compatible JDK if your build requires a newer version.
+
+## Setup and Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/KothariAlok/healthcare-management-system.git
+cd healthcare-management-system
+```
+
+Replace `KothariAlok` with your GitHub username.
+
+### 2. Create the MySQL database
+
+Open MySQL and run:
+
+```sql
+CREATE DATABASE healthcare_db;
+```
+
+Use the actual database name configured in your application's properties.
+
+### 3. Configure database credentials
+
+Configure your database connection in `src/main/resources/application.properties`.
+
+Example:
 
 ```properties
 spring.datasource.url=jdbc:mysql://localhost:3306/healthcare_db
 spring.datasource.username=${DB_USERNAME}
 spring.datasource.password=${DB_PASSWORD}
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
 ```
 
-Replace the database name with your local database name if necessary. Do not commit real database passwords or other credentials to GitHub.
+Set the `DB_USERNAME` and `DB_PASSWORD` environment variables in your IDE or execution environment before running the application.
 
-## Getting Started
+Do not commit real database passwords, access tokens, or other secrets to GitHub.
 
-### Prerequisites
+`spring.jpa.hibernate.ddl-auto=update` is useful for local development. For production, use controlled database migrations and a safer schema-management strategy.
 
-- Java version compatible with the project configuration
-- MySQL Server
-- Maven, or the Maven Wrapper included in the project
-- Git
+### 4. Run the application
 
-### Setup
+Open the project in IntelliJ IDEA, reload Maven dependencies, and run `HmsApplication.java`.
 
-1. Clone the repository:
+Alternatively, if your project includes the Maven wrapper:
 
-   ```bash
-   git clone https://github.com/kothariAlok/healthcare-management-system.git
-   ```
+```bash
+./mvnw spring-boot:run
+```
 
-2. Navigate into the project directory:
+On Windows Command Prompt:
 
-   ```bash
-   cd healthcare-management-system
-   ```
+```bat
+mvnw.cmd spring-boot:run
+```
 
-3. Create the MySQL database if it does not already exist:
+The application normally starts at:
 
-   ```sql
-   CREATE DATABASE healthcare_db;
-   ```
+```text
+http://localhost:8080
+```
 
-4. Configure the required environment variables `DB_USERNAME` and `DB_PASSWORD` in your IDE or terminal.
+Confirm the startup logs show that Spring Boot started successfully and connected to MySQL.
 
-5. Run the application using the Maven Wrapper on Windows:
+## API Endpoints
 
-   ```bat
-   mvnw.cmd spring-boot:run
-   ```
+Base URL:
 
-6. Test the implemented API endpoints using Postman.
+```text
+http://localhost:8080
+```
+
+### Patient APIs
+
+The exact routes depend on the mappings in your `PatientController`.
+
+| Method | Purpose |
+|---|---|
+| POST | Create a patient |
+| GET | Retrieve patient records |
+| GET | Retrieve a patient by ID |
+| PUT | Update a patient |
+| DELETE | Delete a patient |
+
+Verify the actual paths in `PatientController.java` before publishing this section.
+
+### Doctor APIs
+
+The exact routes depend on the mappings in your `DoctorController`.
+
+| Method | Purpose |
+|---|---|
+| POST | Create a doctor |
+| GET | Retrieve doctor records |
+| GET | Retrieve a doctor by ID |
+| PUT | Update a doctor |
+| DELETE | Delete a doctor |
+
+Verify the actual paths in `DoctorController.java` before publishing this section.
+
+### Appointment APIs
+
+Base path: `/api/appointments`
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/appointments` | Book an appointment |
+| GET | `/api/appointments` | Retrieve all appointments |
+| GET | `/api/appointments/{id}` | Retrieve an appointment by ID |
+| GET | `/api/appointments/doctor/{doctorId}` | Retrieve appointments for a doctor |
+| GET | `/api/appointments/patient/{patientId}` | Retrieve appointments for a patient |
+| PATCH | `/api/appointments/{id}/cancel` | Cancel an appointment |
+
+### Example: Book an appointment
+
+Request:
+
+```http
+POST /api/appointments
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "patientId": 1,
+  "doctorId": 1,
+  "startTime": "2026-10-28T10:00:00",
+  "reason": "General consultation"
+}
+```
+
+The patient and doctor IDs must refer to existing records. The appointment start time must be in the future.
+
+A successful booking returns `201 Created` with the saved appointment.
+
+### Example: Conflicting booking
+
+Submit another request for the same doctor with an overlapping start time:
+
+```json
+{
+  "patientId": 1,
+  "doctorId": 1,
+  "startTime": "2026-10-28T10:15:00",
+  "reason": "Follow-up consultation"
+}
+```
+
+If the first appointment is still booked, the request should return `409 Conflict`.
+
+### Example: Cancel an appointment
+
+```http
+PATCH /api/appointments/1/cancel
+```
+
+A successful cancellation changes the appointment status to `CANCELLED`, making its time slot available again.
+
+## Error Handling
+
+The API is designed to return meaningful HTTP status codes:
+
+| Status code | Meaning |
+|---|---|
+| 201 Created | Appointment successfully booked |
+| 200 OK | Request completed successfully |
+| 400 Bad Request | Invalid request data |
+| 404 Not Found | Patient, doctor, or appointment not found |
+| 409 Conflict | Appointment overlaps an existing booking |
+
+Actual error responses depend on the exception handling and validation implemented in the application.
+
+## Testing
+
+Use Postman to verify:
+
+1. Patient and doctor CRUD operations.
+2. Successful appointment booking.
+3. Rejection of overlapping appointments.
+4. Acceptance of back-to-back appointments.
+5. Booking after cancellation.
+6. Invalid patient and doctor IDs.
+7. Invalid or past appointment start times.
+8. Appointment retrieval by doctor and patient.
 
 ## Future Enhancements
 
-Potential improvements include:
+Potential next improvements include:
 
-- Request validation
-- Global exception handling
-- Appointment management
-- Patient-doctor relationships
-- Authentication and role-based authorization
-- Unit and integration tests
+- Spring Security and JWT authentication.
+- Role-based authorization for admins, doctors, and patients.
+- Search, sorting, and pagination.
+- DTO-based responses for all API endpoints.
+- Unit and integration tests with JUnit and Mockito.
+- API documentation with Swagger/OpenAPI.
+- Docker and Docker Compose.
+- GitHub Actions CI/CD.
+- Kafka-based appointment notifications.
+- Doctor availability schedules and configurable appointment durations.
+- Database migrations using Flyway or Liquibase.
 
-These are planned enhancements, not claims about currently implemented functionality.
+## Learning Objectives
 
-## Project Status
+This project is intended to demonstrate practical understanding of:
 
-This project is under active development. Features and API documentation will be updated as additional modules are implemented and tested.
+- Java object-oriented programming.
+- REST API design.
+- Spring Boot MVC architecture.
+- Dependency injection.
+- Spring Data JPA and Hibernate.
+- MySQL database relationships.
+- Request validation and exception handling.
+- Transaction management and pessimistic locking.
+- Git and GitHub workflows.
 
 ## Author
 
-Alok Kothari
-
-GitHub: https://github.com/kothariAlok
+**Alok Kothari**
+- LinkedIn: www.linkedin.com/in/alok-kothari-4b3486253
+- GitHub: https://github.com/KothariAlok
